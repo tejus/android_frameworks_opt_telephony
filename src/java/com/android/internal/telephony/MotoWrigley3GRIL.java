@@ -17,11 +17,19 @@
 package com.android.internal.telephony;
 
 import android.content.Context;
+import android.os.AsyncResult;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 import android.os.Parcel;
 import android.telephony.PhoneNumberUtils;
 import android.util.Log;
 
+
+import com.android.internal.telephony.DataCallState;
 import com.android.internal.telephony.gsm.SuppServiceNotification;
+import static com.android.internal.telephony.RILConstants.GENERIC_FAILURE;
+import static com.android.internal.telephony.RILConstants.RIL_REQUEST_SETUP_DATA_CALL;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,21 +41,85 @@ import java.util.Collections;
  * {@hide}
  */
 public class MotoWrigley3GRIL extends RIL {
+    private static final String TAG = "MotoWrigley3GRIL";
+
+    private int mDataConnectionCount = -1;
+    private RILRequest mSetupDataCallRequest;
+    private Boolean mRadioShouldBeOn;
+    private DataCallRecoveryState mRecoveryState = DataCallRecoveryState.IDLE;
+
+    private Handler mHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case MSG_RECOVERY_POWERDOWN:
+                    Log.d(TAG, "SETUP_DATA_CALL recovery: powered down radio, should be on = " + mRadioShouldBeOn);
+                    if (mRadioShouldBeOn != null && mRadioShouldBeOn) {
+                        MotoWrigley3GRIL.super.setRadioPower(true, obtainMessage(MSG_RECOVERY_POWERUP));
+                        break;
+                    }
+                    /* else fall through */
+                case MSG_RECOVERY_POWERUP:
+                    Log.d(TAG, "SETUP_DATA_CALL recovery: powered up radio");
+                    mRecoveryState = DataCallRecoveryState.DONE;
+                    break;
+            }
+        }
+    };
+
+    private static enum DataCallRecoveryState {
+        IDLE,
+        ACTIVE,
+        DONE
+    };
+
+    private static final int MSG_RECOVERY_POWERDOWN = 1;
+    private static final int MSG_RECOVERY_POWERUP = 2;
+
+
 
     public MotoWrigley3GRIL(Context context, int networkMode, int cdmaSubscription) {
         super(context, networkMode, cdmaSubscription);
+        mSender = new RILSender(mSenderThread.getLooper());
+    }
+
+    @Override
+    protected RILRequest
+    findAndRemoveRequestFromList(int serial) {
+        RILRequest rr = super.findAndRemoveRequestFromList(serial);
+        if (rr == mSetupDataCallRequest) {
+            /*
+             * either response arrived, or there was an error that was already handled -
+             * either way, the upper layers were notified already
+             */
+            Log.d(TAG, "Got SETUP_DATA_CALL response");
+            mSetupDataCallRequest = null;
+        }
+        return rr;
+    }
+
+    @Override
+    protected void
+    handleProcessedSolicitedResponse(RILRequest rr, int error, Object ret) {
+        if (rr.mRequest == RIL_REQUEST_SETUP_DATA_CALL) {
+            if (error == GENERIC_FAILURE && mRecoveryState == DataCallRecoveryState.IDLE) {
+                Log.w(TAG, "Got GENERIC_FAILURE error for SETUP_DATA_CALL command, attempting recovery...");
+                mRecoveryState = DataCallRecoveryState.ACTIVE;
+                super.setRadioPower(false, mHandler.obtainMessage(MSG_RECOVERY_POWERDOWN));
+            } else if (error == 0 && mRecoveryState == DataCallRecoveryState.DONE) {
+                Log.d(TAG, "SETUP_DATA_CALL GENERIC_FAILURE recovery successful.");
+                mRecoveryState = DataCallRecoveryState.IDLE;
+            }
+        }
+
+        super.handleProcessedSolicitedResponse(rr, error, ret);
     }
 
     @Override
     protected Object
     responseSuppServiceNotification(Parcel p) {
-        SuppServiceNotification notification = new SuppServiceNotification();
-
-        notification.notificationType = p.readInt();
-        notification.code = p.readInt();
-        notification.index = p.readInt();
-        notification.type = p.readInt();
-        notification.number = p.readString();
+        SuppServiceNotification notification =
+                (SuppServiceNotification) super.responseSuppServiceNotification(p);
 
         /**
          * Moto's RIL seems to confuse code2 0 ('forwarded call') and
@@ -133,5 +205,93 @@ public class MotoWrigley3GRIL extends RIL {
         Collections.sort(response);
 
         return response;
+    }
+
+    @Override
+    protected Object
+    responseDataCallList(Parcel p) {
+        ArrayList<DataCallState> response =
+                (ArrayList<DataCallState>) super.responseDataCallList(p);
+        mDataConnectionCount = response.size();
+        Log.d(TAG, "Got data call list message, now has " + mDataConnectionCount + " connections");
+
+        return response;
+    }
+
+    @Override
+    public void
+    setupDataCall(String radioTechnology, String profile, String apn,
+            String user, String password, String authType, String protocol,
+            Message result) {
+        RILRequest rr
+                = RILRequest.obtain(RIL_REQUEST_SETUP_DATA_CALL, result);
+
+        rr.mp.writeInt(7);
+
+        rr.mp.writeString(radioTechnology);
+        rr.mp.writeString(profile);
+        rr.mp.writeString(apn);
+        rr.mp.writeString(user);
+        rr.mp.writeString(password);
+        rr.mp.writeString(authType);
+        rr.mp.writeString(protocol);
+
+        if (RILJ_LOGD) riljLog(rr.serialString() + "> "
+                + requestToString(rr.mRequest) + " " + radioTechnology + " "
+                + profile + " " + apn + " " + user + " "
+                + password + " " + authType + " " + protocol);
+
+        mSetupDataCallRequest = rr;
+
+        send(rr);
+    }
+
+    @Override
+    public void
+    deactivateDataCall(int cid, int reason, Message result) {
+        if (mDataConnectionCount == 0) {
+            Log.w(TAG, "Received deactivateDataCall RIL call without an active data call, dropping");
+            AsyncResult.forMessage(result, null, null);
+            result.sendToTarget();
+        } else {
+            super.deactivateDataCall(cid, reason, result);
+        }
+    }
+
+    @Override
+    public void
+    setRadioPower(boolean power, Message result) {
+        mRadioShouldBeOn = power;
+        super.setRadioPower(power, result);
+    }
+
+    @Override
+    protected void switchToRadioState(RadioState newState) {
+        Log.d(TAG, "switchToRadioState, old = " + mState + " new = " + newState);
+        super.switchToRadioState(newState);
+    }
+
+    class RILSender extends RIL.RILSender {
+        public RILSender(Looper looper) {
+            super(looper);
+        }
+
+        @Override
+        public void
+        handleMessage(Message msg) {
+            super.handleMessage(msg);
+
+            if (msg.what == EVENT_WAKE_LOCK_TIMEOUT && mSetupDataCallRequest != null) {
+                MotoWrigley3GRIL.super.findAndRemoveRequestFromList(mSetupDataCallRequest.mSerial);
+                if (mSetupDataCallRequest.mResult != null) {
+                    Log.e(TAG, "Got stale SETUP_DATA_CALL request, pretending radio not available");
+                    CommandException ex = new CommandException(CommandException.Error.RADIO_NOT_AVAILABLE);
+                    AsyncResult.forMessage(mSetupDataCallRequest.mResult, null, ex);
+                    mSetupDataCallRequest.mResult.sendToTarget();
+                }
+                mSetupDataCallRequest.release();
+                mSetupDataCallRequest = null;
+            }
+        }
     }
 }
