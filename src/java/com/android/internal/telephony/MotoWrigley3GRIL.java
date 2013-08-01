@@ -26,7 +26,7 @@ import android.telephony.PhoneNumberUtils;
 import android.util.Log;
 
 
-import com.android.internal.telephony.DataCallState;
+import com.android.internal.telephony.dataconnection.DataCallResponse;
 import com.android.internal.telephony.gsm.SuppServiceNotification;
 import static com.android.internal.telephony.RILConstants.GENERIC_FAILURE;
 import static com.android.internal.telephony.RILConstants.RIL_REQUEST_SETUP_DATA_CALL;
@@ -210,8 +210,8 @@ public class MotoWrigley3GRIL extends RIL {
     @Override
     protected Object
     responseDataCallList(Parcel p) {
-        ArrayList<DataCallState> response =
-                (ArrayList<DataCallState>) super.responseDataCallList(p);
+        ArrayList<DataCallResponse> response =
+                (ArrayList<DataCallResponse>) super.responseDataCallList(p);
         mDataConnectionCount = response.size();
         Log.d(TAG, "Got data call list message, now has " + mDataConnectionCount + " connections");
 
@@ -226,15 +226,15 @@ public class MotoWrigley3GRIL extends RIL {
         RILRequest rr
                 = RILRequest.obtain(RIL_REQUEST_SETUP_DATA_CALL, result);
 
-        rr.mp.writeInt(7);
+        rr.mParcel.writeInt(7);
 
-        rr.mp.writeString(radioTechnology);
-        rr.mp.writeString(profile);
-        rr.mp.writeString(apn);
-        rr.mp.writeString(user);
-        rr.mp.writeString(password);
-        rr.mp.writeString(authType);
-        rr.mp.writeString(protocol);
+        rr.mParcel.writeString(radioTechnology);
+        rr.mParcel.writeString(profile);
+        rr.mParcel.writeString(apn);
+        rr.mParcel.writeString(user);
+        rr.mParcel.writeString(password);
+        rr.mParcel.writeString(authType);
+        rr.mParcel.writeString(protocol);
 
         if (RILJ_LOGD) riljLog(rr.serialString() + "> "
                 + requestToString(rr.mRequest) + " " + radioTechnology + " "
