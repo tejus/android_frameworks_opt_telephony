@@ -27,8 +27,6 @@ import android.telephony.Rlog;
 
 import com.android.internal.telephony.dataconnection.DataCallResponse;
 
-import com.android.internal.telephony.dataconnection.DataCallResponse;
-
 /*
  * Custom Qualcomm No SimReady RIL for Sony 8x60 Radio
  *
