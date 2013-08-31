@@ -40,11 +40,14 @@ import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.IccCardConstants.State;
 import com.android.internal.telephony.cdma.CdmaSubscriptionSourceManager;
 import com.android.internal.telephony.Phone;
+import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppState;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.PersoSubState;
 import com.android.internal.telephony.uicc.IccCardStatus.CardState;
 import com.android.internal.telephony.uicc.IccCardStatus.PinState;
 import com.android.internal.telephony.uicc.UiccController;
+import com.android.internal.telephony.uicc.RuimRecords;
+
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -150,6 +153,36 @@ public class IccCardProxy extends Handler implements IccCard {
                 }
             }
             updateQuietMode();
+            updateActiveRecord();
+        }
+    }
+
+    /**
+     * This method sets the IccRecord, corresponding to the currently active
+     * subscription, as the active record.
+     */
+    private void updateActiveRecord() {
+        log("updateActiveRecord app type = " + mCurrentAppType +
+                "mIccRecords = " + mIccRecords);
+
+        if (mIccRecords == null) {
+            return;
+        }
+
+        if (mCurrentAppType == UiccController.APP_FAM_3GPP2) {
+            int newSubscriptionSource = mCdmaSSM.getCdmaSubscriptionSource();
+            // allow ruim to fetch in cdma lte mode, don't do it for devices don't have lte
+            // in nv mode. fixes cases where it iccid could be unknown on some cdma nv devices.
+            if (newSubscriptionSource == CdmaSubscriptionSourceManager.SUBSCRIPTION_FROM_RUIM
+                || PhoneFactory.getDefaultPhone().getLteOnCdmaMode()
+                == PhoneConstants.LTE_ON_CDMA_TRUE) {
+                // Set this as the Active record.
+                log("Setting Ruim Record as active");
+                mIccRecords.recordsRequired();
+            }
+        } else if (mCurrentAppType == UiccController.APP_FAM_3GPP) {
+            log("Setting SIM Record as active");
+            mIccRecords.recordsRequired();
         }
     }
 
@@ -247,6 +280,7 @@ public class IccCardProxy extends Handler implements IccCard {
                 break;
             case EVENT_CDMA_SUBSCRIPTION_SOURCE_CHANGED:
                 updateQuietMode();
+                updateActiveRecord();
                 break;
             default:
                 loge("Unhandled message with number: " + msg.what);
@@ -275,6 +309,7 @@ public class IccCardProxy extends Handler implements IccCard {
                 mUiccApplication = newApp;
                 mIccRecords = newRecords;
                 registerUiccCardEvents();
+                updateActiveRecord();
             }
 
             updateExternalState();

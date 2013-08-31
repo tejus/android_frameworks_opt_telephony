@@ -665,8 +665,7 @@ public final class DcTracker extends DcTrackerBase {
 
         boolean desiredPowerState = mPhone.getServiceStateTracker().getDesiredPowerState();
 
-        if (apnContext.isConnectable() &&
-                isDataAllowed(apnContext) && getAnyDataEnabled() && !isEmergency()) {
+        if (canSetupData(apnContext)) {
             if (apnContext.getState() == DctConstants.State.FAILED) {
                 if (DBG) log("trySetupData: make a FAILED ApnContext IDLE so its reusable");
                 apnContext.setState(DctConstants.State.IDLE);
@@ -716,11 +715,8 @@ public final class DcTracker extends DcTrackerBase {
     * @return boolean
     */
     private boolean canSetupData(ApnContext apnContext) {
-        if (apnContext.getState() != DctConstants.State.IDLE && apnContext.getState() != DctConstants.State.SCANNING) {
-            return false;
-        }
-
-        if (isDataAllowed(apnContext) && getAnyDataEnabled() && !isEmergency()) {
+        if (apnContext.isConnectable() && isDataAllowed(apnContext)
+                && getAnyDataEnabled() && !isEmergency()) {
             return true;
         }
 
@@ -952,8 +948,9 @@ public final class DcTracker extends DcTrackerBase {
             }
         } else if (mvno_type.equalsIgnoreCase("gid")) {
             String gid1 = r.getGid1();
-            if ((gid1 != null) && gid1.substring(0,
-                    mvno_match_data.length()).equalsIgnoreCase(mvno_match_data)) {
+            int mvno_match_data_length = mvno_match_data.length();
+            if ((gid1 != null) && (gid1.length() >= mvno_match_data_length) &&
+                    gid1.substring(0, mvno_match_data_length).equalsIgnoreCase(mvno_match_data)) {
                 return true;
             }
         }
@@ -2213,7 +2210,10 @@ public final class DcTracker extends DcTrackerBase {
                 break;
 
             case DctConstants.EVENT_CDMA_SUBSCRIPTION_SOURCE_CHANGED:
-                onRecordsLoaded(Phone.REASON_NV_READY);
+                if (mCdmaSsm.getCdmaSubscriptionSource() ==
+                        CdmaSubscriptionSourceManager.SUBSCRIPTION_FROM_NV) {
+                    onRecordsLoaded(Phone.REASON_NV_READY);
+                }
                 break;
 
             default:
