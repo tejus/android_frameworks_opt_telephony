@@ -305,9 +305,10 @@ public final class MccTable
      */
     private static void setWifiCountryCodeFromMcc(Context context, int mcc) {
         String country = MccTable.countryCodeForMcc(mcc);
-        if (!country.isEmpty()) {
+        WifiManager wM = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        String currentCountry = wM.getCountryCode();
+        if (currentCountry == null && !country.isEmpty()) {
             Rlog.d(LOG_TAG, "WIFI_COUNTRY_CODE set to " + country);
-            WifiManager wM = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
             //persist
             wM.setCountryCode(country, true);
         }
