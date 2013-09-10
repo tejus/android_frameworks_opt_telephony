@@ -171,11 +171,11 @@ public class IccCardProxy extends Handler implements IccCard {
 
         if (mCurrentAppType == UiccController.APP_FAM_3GPP2) {
             int newSubscriptionSource = mCdmaSSM.getCdmaSubscriptionSource();
-            // Allow both RUIM and CdmaLte from NV to trigger records
-            // required
+            // allow ruim to fetch in cdma lte mode, don't do it for devices don't have lte
+            // in nv mode. fixes cases where it iccid could be unknown on some cdma nv devices.
             if (newSubscriptionSource == CdmaSubscriptionSourceManager.SUBSCRIPTION_FROM_RUIM
-                || ((PhoneFactory.getDefaultPhone().getLteOnCdmaMode()
-                == PhoneConstants.LTE_ON_CDMA_TRUE) && (newSubscriptionSource == CdmaSubscriptionSourceManager.SUBSCRIPTION_FROM_NV))) {
+                || PhoneFactory.getDefaultPhone().getLteOnCdmaMode()
+                == PhoneConstants.LTE_ON_CDMA_TRUE) {
                 // Set this as the Active record.
                 log("Setting Ruim Record as active");
                 mIccRecords.recordsRequired();
