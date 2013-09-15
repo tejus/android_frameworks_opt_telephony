@@ -1402,6 +1402,8 @@ public abstract class DcTrackerBase extends Handler {
             putRecoveryAction(RecoveryAction.GET_DATA_CALL_LIST);
         } else {
             if (VDBG_STALL) log("updateDataStallInfo: NONE");
+            //This is just a hack to get data connection up again, proper way would be to actually trigger recom
+            Phone.mCM.getDataCallList(this.obtainMessage(DctConstants.EVENT_DATA_STATE_CHANGED));
         }
     }
 
