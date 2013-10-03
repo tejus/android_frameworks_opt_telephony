@@ -25,6 +25,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Parcel;
 import android.os.SystemProperties;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.telephony.CellInfo;
 import android.telephony.Rlog;
@@ -55,11 +56,13 @@ public class HTCQualcommRIL extends RIL implements CommandsInterface {
     @Override
     protected Object
     responseIccCardStatus(Parcel p) {
-        // force CDMA + LTE network mode
+        // get type from Settings.Global default to CDMA + LTE network mode
         boolean forceCdmaLte = needsOldRilFeature("forceCdmaLteNetworkType");
-
         if (forceCdmaLte) {
-            setPreferredNetworkType(NETWORK_MODE_LTE_CDMA_EVDO, null);
+            int phoneType = android.provider.Settings.Global.getInt(mContext.getContentResolver(),
+                            android.provider.Settings.Global.PREFERRED_NETWORK_MODE,
+                            NETWORK_MODE_LTE_CDMA_EVDO);
+            setPreferredNetworkType(phoneType, null);
         }
 
         return super.responseIccCardStatus(p);
@@ -164,7 +167,10 @@ public class HTCQualcommRIL extends RIL implements CommandsInterface {
                 // Trigger socket reset if RIL connect is called again
                 SystemProperties.set("ril.socket.reset", "1");
                 setPreferredNetworkType(mPreferredNetworkType, null);
-                setCdmaSubscriptionSource(mCdmaSubscription, null);
+                int cdmaSubscription = Settings.Global.getInt(mContext.getContentResolver(), Settings.Global.CDMA_SUBSCRIPTION_MODE, -1);
+                if(cdmaSubscription != -1) {
+                    setCdmaSubscriptionSource(cdmaSubscription, null);
+                }
                 setCellInfoListRate(Integer.MAX_VALUE, null);
                 notifyRegistrantsRilConnectionChanged(((int[])ret)[0]);
                 break;
