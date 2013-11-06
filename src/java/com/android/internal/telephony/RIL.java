@@ -2563,9 +2563,9 @@ public class RIL extends BaseCommands implements CommandsInterface {
                     }
                     break;
             }
-	}
-        handleProcessedSolicitedResponse(rr, error, ret);
-        rr.release();
+    }
+	handleProcessedSolicitedResponse(rr, error, ret);
+        return rr;
     }
 
     protected void
